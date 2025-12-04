@@ -5,17 +5,17 @@
   "tsx": true,
   "tailwind": {
     "config": "",
-    "css": "src/index.css",
+    "css": "src/renderer/index.css",
     "baseColor": "slate",
     "cssVariables": true,
     "prefix": ""
   },
   "aliases": {
-    "components": "@/components",
+    "components": "@components",
     "utils": "@/lib/utils",
-    "ui": "@/components/ui",
+    "ui": "@components/ui",
     "lib": "@/lib",
-    "hooks": "@/hooks"
+    "hooks": "@hooks"
   },
   "iconLibrary": "lucide"
 }
