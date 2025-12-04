@@ -20,7 +20,9 @@
     "paths": {
       "@/*": ["./src/renderer/*"],
       "@components/*": ["./src/renderer/components/*"],
-      "@hooks/*": ["./src/renderer/hooks/*"]
+      "@hooks/*": ["./src/renderer/hooks/*"],
+      "@contracts/*": ["./src/contracts/*"],
+      "@contracts": ["./src/contracts/index.ts"]
     }
   },
   "include": ["src/**/*", "*.config.ts", "forge.env.d.ts"],

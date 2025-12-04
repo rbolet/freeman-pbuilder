@@ -19,6 +19,7 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src/renderer"),
       "@components": path.resolve(__dirname, "./src/renderer/components"),
       "@hooks": path.resolve(__dirname, "./src/renderer/hooks"),
+      "@contracts": path.resolve(__dirname, "./src/contracts"),
     },
   },
 });
