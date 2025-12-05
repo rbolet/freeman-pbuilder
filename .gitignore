@@ -93,3 +93,6 @@ out/
 
 # Test results
 test-results/
+
+# AI agent instructions (local only)
+_*/

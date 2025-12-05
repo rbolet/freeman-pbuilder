@@ -1,5 +1,5 @@
 import { sqliteTable } from "drizzle-orm/sqlite-core";
-import { auditColumns, idColumn, nameColumn } from "./columns";
+import { auditTimestamps, id, name } from "./columns";
 
 /**
  * Proposals table schema
@@ -7,9 +7,9 @@ import { auditColumns, idColumn, nameColumn } from "./columns";
  * Stores proposal records with soft delete support
  */
 export const proposals = sqliteTable("proposals", {
-  id: idColumn,
-  name: nameColumn,
-  ...auditColumns,
+  id,
+  name,
+  ...auditTimestamps,
 });
 
 // Type inference for select and insert operations
