@@ -5,11 +5,57 @@ import { MakerDeb } from "@electron-forge/maker-deb";
 import { MakerRpm } from "@electron-forge/maker-rpm";
 import { VitePlugin } from "@electron-forge/plugin-vite";
 import { FusesPlugin } from "@electron-forge/plugin-fuses";
+import { AutoUnpackNativesPlugin } from "@electron-forge/plugin-auto-unpack-natives";
 import { FuseV1Options, FuseVersion } from "@electron/fuses";
+import fs from "fs";
+import path from "path";
+
+// Copy native dependencies to the .vite/build directory before packaging
+function copyNativeDeps(buildPath: string) {
+  const nodeModulesSrc = path.join(__dirname, "node_modules", "better-sqlite3");
+  const nodeModulesDest = path.join(
+    buildPath,
+    "node_modules",
+    "better-sqlite3"
+  );
+
+  if (fs.existsSync(nodeModulesSrc)) {
+    fs.cpSync(nodeModulesSrc, nodeModulesDest, { recursive: true });
+    console.log("[Forge] Copied better-sqlite3 to build output");
+
+    // Also copy bindings dependency
+    const bindingsSrc = path.join(__dirname, "node_modules", "bindings");
+    const bindingsDest = path.join(buildPath, "node_modules", "bindings");
+    if (fs.existsSync(bindingsSrc)) {
+      fs.cpSync(bindingsSrc, bindingsDest, { recursive: true });
+      console.log("[Forge] Copied bindings to build output");
+    }
+
+    // Copy file-uri-to-path dependency
+    const fileUriSrc = path.join(__dirname, "node_modules", "file-uri-to-path");
+    const fileUriDest = path.join(
+      buildPath,
+      "node_modules",
+      "file-uri-to-path"
+    );
+    if (fs.existsSync(fileUriSrc)) {
+      fs.cpSync(fileUriSrc, fileUriDest, { recursive: true });
+      console.log("[Forge] Copied file-uri-to-path to build output");
+    }
+  }
+}
 
 const config: ForgeConfig = {
   packagerConfig: {
-    asar: true,
+    asar: {
+      // Unpack native modules - they can't run from inside asar
+      unpack: "**/node_modules/{better-sqlite3,bindings,file-uri-to-path}/**/*",
+    },
+  },
+  hooks: {
+    packageAfterCopy: async (_config, buildPath) => {
+      copyNativeDeps(buildPath);
+    },
   },
   rebuildConfig: {},
   makers: [
@@ -42,6 +88,8 @@ const config: ForgeConfig = {
         },
       ],
     }),
+    // Automatically unpack native modules from asar
+    new AutoUnpackNativesPlugin({}),
     // Fuses are used to enable/disable various Electron functionality
     // at package time, before code signing the application
     new FusesPlugin({

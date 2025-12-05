@@ -7,7 +7,6 @@ export default defineConfig(async () => {
   const tailwindcss = (await import("@tailwindcss/vite")).default;
 
   return {
-    root: path.resolve(__dirname, "./src"),
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {

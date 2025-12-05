@@ -96,3 +96,7 @@ test-results/
 
 # AI agent instructions (local only)
 _*/
+
+# Playwright test artifacts
+playwright-report/
+playwright-traces/
