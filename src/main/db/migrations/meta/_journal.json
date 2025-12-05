@@ -8,6 +8,13 @@
       "when": 1764889431922,
       "tag": "0000_famous_nomad",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1764924348826,
+      "tag": "0001_fantastic_luminals",
+      "breakpoints": true
     }
   ]
 }
