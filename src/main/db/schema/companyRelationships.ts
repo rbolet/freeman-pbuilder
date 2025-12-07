@@ -18,7 +18,7 @@ export const companyRelationships = sqliteTable("company_relationships", {
   relationship: text("relationship", {
     enum: companyRelationshipTypes,
   }).notNull(),
-  startDate: text("start_date").notNull(), // ISO 8601 timestamp
+  startDate: text("start_date"), // ISO 8601 timestamp
   ...auditTimestamps,
 });
 
