@@ -1,4 +1,4 @@
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, inArray, isNull } from "drizzle-orm";
 import { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { SQLiteTable, SQLiteColumn } from "drizzle-orm/sqlite-core";
 import { validateUUIDs } from "../utils";
@@ -54,6 +54,15 @@ export interface InsertOptions {
 }
 
 /**
+ * Options for repository query methods.
+ * Combines transform options with query behavior options.
+ */
+export interface RepositoryRequestOptions extends TransformOptions {
+  /** Include soft-deleted records in results. Default: false */
+  includeDeleted?: boolean;
+}
+
+/**
  * Strip keys from a record based on transform options.
  * - If `include` is provided, returns only those keys
  * - Otherwise, excludes keys from `exclude` array
@@ -101,7 +110,7 @@ export class BaseRepository<T extends BaseTable, TOutput = T["$inferSelect"]> {
    */
   protected transform(
     record: T["$inferSelect"],
-    options: TransformOptions = { includeTimestamps: false }
+    options: RepositoryRequestOptions = { includeTimestamps: false }
   ): TOutput {
     return stripKeys(record as Record<string, unknown>, options) as TOutput;
   }
@@ -111,52 +120,82 @@ export class BaseRepository<T extends BaseTable, TOutput = T["$inferSelect"]> {
    */
   protected transformAll(
     records: T["$inferSelect"][],
-    options: TransformOptions = { includeTimestamps: false }
+    options: RepositoryRequestOptions = { includeTimestamps: false }
   ): TOutput[] {
     return records.map((r) => this.transform(r, options));
   }
 
   /**
    * Find all records in the table
+   * @param options - Query and transform options
    */
-  findAll(): TOutput[] {
-    return this.transformAll(this.db.select().from(this.table).all());
+  findAll(options: RepositoryRequestOptions = {}): TOutput[] {
+    const { includeDeleted = false, ...transformOptions } = options;
+
+    if (includeDeleted) {
+      return this.transformAll(this.db.select().from(this.table).all(), transformOptions);
+    }
+
+    return this.transformAll(
+      this.db.select().from(this.table).where(isNull(this.table.deletedAt)).all(),
+      transformOptions
+    );
   }
 
   /**
    * Find a single record by primary key
+   * @param id - The record ID
+   * @param options - Query and transform options
    * @throws Error if more than one record is found
    */
-  findById(id: string): TOutput | undefined {
-    const results = this.db.select().from(this.table).where(eq(this.table.id, id)).all();
+  findById(id: string, options: RepositoryRequestOptions = {}): TOutput | undefined {
+    const { includeDeleted = false, ...transformOptions } = options;
+
+    const whereClause = includeDeleted
+      ? eq(this.table.id, id)
+      : and(eq(this.table.id, id), isNull(this.table.deletedAt));
+
+    const results = this.db.select().from(this.table).where(whereClause).all();
 
     if (results.length > 1) {
       throw new Error(`Expected 0 or 1 record for id "${id}", but found ${results.length}`);
     }
 
-    return results[0] ? this.transform(results[0]) : undefined;
+    return results[0] ? this.transform(results[0], transformOptions) : undefined;
   }
 
   /**
    * Find records matching the given conditions
    * @param conditions - Object with column/value pairs to filter by
+   * @param options - Query and transform options
    */
-  findWhere(conditions: Partial<T["$inferSelect"]>): TOutput[] {
+  findWhere(
+    conditions: Partial<T["$inferSelect"]>,
+    options: RepositoryRequestOptions = {}
+  ): TOutput[] {
+    const { includeDeleted = false, ...transformOptions } = options;
     const entries = Object.entries(conditions);
+
     if (entries.length === 0) {
-      return this.findAll();
+      return this.findAll(options);
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const table = this.table as any;
     const clauses = entries.map(([column, value]) => eq(table[column], value));
 
+    // Add soft delete filter unless includeDeleted is true
+    if (!includeDeleted) {
+      clauses.push(isNull(this.table.deletedAt));
+    }
+
     return this.transformAll(
       this.db
         .select()
         .from(this.table)
         .where(and(...clauses))
-        .all()
+        .all(),
+      transformOptions
     );
   }
 
@@ -248,5 +287,123 @@ export class BaseRepository<T extends BaseTable, TOutput = T["$inferSelect"]> {
     }
 
     return insertedIds;
+  }
+
+  /**
+   * Soft delete one or more records by setting deletedAt timestamp.
+   * Idempotent - records already deleted are included in the result.
+   * @param id - A single ID or array of IDs to delete
+   * @returns Array of IDs that were deleted (or were already deleted)
+   * @throws Error if any of the provided IDs were not found
+   */
+  deleteById(id: string | string[]): string[] {
+    const ids = Array.isArray(id) ? id : [id];
+
+    if (ids.length === 0) {
+      throw new Error("No IDs provided for delete");
+    }
+
+    // First, verify all IDs exist (regardless of deleted status)
+    const whereClause = ids.length === 1 ? eq(this.table.id, ids[0]) : inArray(this.table.id, ids);
+
+    const existingRows = this.db
+      .select({ id: this.table.id })
+      .from(this.table)
+      .where(whereClause)
+      .all();
+
+    const existingIds = existingRows.map((row) => row.id as string);
+
+    if (existingIds.length !== ids.length) {
+      const notFoundIds = ids.filter((id) => !existingIds.includes(id));
+      throw new Error(
+        `Records not found for IDs: ${notFoundIds.map((id) => `"${id}"`).join(", ")}`
+      );
+    }
+
+    // Update only non-deleted records (idempotent)
+    this.db
+      .update(this.table)
+      .set({ deletedAt: new Date().toISOString() } as Record<string, unknown>)
+      .where(and(whereClause, isNull(this.table.deletedAt)))
+      .run();
+
+    return ids;
+  }
+
+  /**
+   * Restore one or more soft-deleted records by setting deletedAt to null.
+   * Idempotent - records not deleted are included in the result.
+   * @param id - A single ID or array of IDs to restore
+   * @returns Array of IDs that were restored (or were not deleted)
+   * @throws Error if any of the provided IDs were not found
+   */
+  restoreById(id: string | string[]): string[] {
+    const ids = Array.isArray(id) ? id : [id];
+
+    if (ids.length === 0) {
+      throw new Error("No IDs provided for restore");
+    }
+
+    // First, verify all IDs exist (regardless of deleted status)
+    const whereClause = ids.length === 1 ? eq(this.table.id, ids[0]) : inArray(this.table.id, ids);
+
+    const existingRows = this.db
+      .select({ id: this.table.id })
+      .from(this.table)
+      .where(whereClause)
+      .all();
+
+    const existingIds = existingRows.map((row) => row.id as string);
+
+    if (existingIds.length !== ids.length) {
+      const notFoundIds = ids.filter((id) => !existingIds.includes(id));
+      throw new Error(
+        `Records not found for IDs: ${notFoundIds.map((id) => `"${id}"`).join(", ")}`
+      );
+    }
+
+    // Update only deleted records (idempotent)
+    this.db
+      .update(this.table)
+      .set({ deletedAt: null } as Record<string, unknown>)
+      .where(whereClause)
+      .run();
+
+    return ids;
+  }
+
+  /**
+   * Permanently delete one or more records from the database.
+   * This is a hard delete - records cannot be recovered.
+   * @param id - A single ID or array of IDs to permanently delete
+   * @returns Array of IDs that were permanently deleted
+   * @throws Error if any of the provided IDs were not found
+   */
+  emptyTrashById(id: string | string[]): string[] {
+    const ids = Array.isArray(id) ? id : [id];
+
+    if (ids.length === 0) {
+      throw new Error("No IDs provided for permanent delete");
+    }
+
+    const whereClause = ids.length === 1 ? eq(this.table.id, ids[0]) : inArray(this.table.id, ids);
+
+    const deletedRows = this.db
+      .delete(this.table)
+      .where(whereClause)
+      .returning({ id: this.table.id })
+      .all();
+
+    const deletedIds = deletedRows.map((row) => row.id as string);
+
+    if (deletedIds.length !== ids.length) {
+      const notFoundIds = ids.filter((id) => !deletedIds.includes(id));
+      throw new Error(
+        `Records not found for IDs: ${notFoundIds.map((id) => `"${id}"`).join(", ")}`
+      );
+    }
+
+    return deletedIds;
   }
 }

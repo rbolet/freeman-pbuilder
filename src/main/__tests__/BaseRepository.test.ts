@@ -464,4 +464,265 @@ describe("BaseRepository", () => {
       expect(rawRecord!.createdAt <= afterInsert).toBe(true);
     });
   });
+
+  describe("soft delete", () => {
+    describe("deleteById", () => {
+      it("should soft delete a single record", () => {
+        const record = createStubRecord({ id: "delete-1", name: "ToDelete" });
+        db.insert(stubTable).values(record).run();
+
+        const result = repo.deleteById("delete-1");
+        expect(result).toEqual(["delete-1"]);
+
+        // Record should not appear in findAll (soft deleted)
+        expect(repo.findAll()).toHaveLength(0);
+
+        // Record should appear with includeDeleted
+        const allRecords = repo.findAll({ includeDeleted: true });
+        expect(allRecords).toHaveLength(1);
+      });
+
+      it("should soft delete multiple records", () => {
+        const records = [
+          createStubRecord({ id: "delete-1", name: "First" }),
+          createStubRecord({ id: "delete-2", name: "Second" }),
+          createStubRecord({ id: "keep-1", name: "Keep" }),
+        ];
+        records.forEach((r) => db.insert(stubTable).values(r).run());
+
+        const result = repo.deleteById(["delete-1", "delete-2"]);
+        expect(result).toEqual(["delete-1", "delete-2"]);
+
+        // Only non-deleted record should appear
+        const remaining = repo.findAll();
+        expect(remaining).toHaveLength(1);
+        expect(remaining[0]).toMatchObject({ id: "keep-1" });
+      });
+
+      it("should throw error when ID not found", () => {
+        expect(() => repo.deleteById("nonexistent")).toThrow(
+          'Records not found for IDs: "nonexistent"'
+        );
+      });
+
+      it("should throw error when any ID not found in array", () => {
+        const record = createStubRecord({ id: "exists", name: "Exists" });
+        db.insert(stubTable).values(record).run();
+
+        expect(() => repo.deleteById(["exists", "missing"])).toThrow(
+          'Records not found for IDs: "missing"'
+        );
+      });
+
+      it("should throw error when empty array provided", () => {
+        expect(() => repo.deleteById([])).toThrow("No IDs provided for delete");
+      });
+
+      it("should be idempotent - deleting already deleted record succeeds", () => {
+        const record = createStubRecord({ id: "delete-twice", name: "DeleteTwice" });
+        db.insert(stubTable).values(record).run();
+
+        // Delete first time
+        repo.deleteById("delete-twice");
+
+        // Delete second time - should not throw
+        const result = repo.deleteById("delete-twice");
+        expect(result).toEqual(["delete-twice"]);
+      });
+
+      it("should set deletedAt timestamp", () => {
+        const record = createStubRecord({ id: "check-timestamp", name: "CheckTimestamp" });
+        db.insert(stubTable).values(record).run();
+
+        const beforeDelete = new Date().toISOString();
+        repo.deleteById("check-timestamp");
+        const afterDelete = new Date().toISOString();
+
+        const rawRecord = db
+          .select()
+          .from(stubTable)
+          .all()
+          .find((r) => r.id === "check-timestamp");
+
+        expect(rawRecord!.deletedAt).not.toBeNull();
+        expect(rawRecord!.deletedAt! >= beforeDelete).toBe(true);
+        expect(rawRecord!.deletedAt! <= afterDelete).toBe(true);
+      });
+    });
+
+    describe("restoreById", () => {
+      it("should restore a soft-deleted record", () => {
+        const record = createStubRecord({ id: "restore-1", name: "ToRestore" });
+        db.insert(stubTable).values(record).run();
+
+        // Delete then restore
+        repo.deleteById("restore-1");
+        expect(repo.findAll()).toHaveLength(0);
+
+        const result = repo.restoreById("restore-1");
+        expect(result).toEqual(["restore-1"]);
+
+        // Record should appear in findAll again
+        expect(repo.findAll()).toHaveLength(1);
+      });
+
+      it("should restore multiple records", () => {
+        const records = [
+          createStubRecord({ id: "restore-1", name: "First" }),
+          createStubRecord({ id: "restore-2", name: "Second" }),
+        ];
+        records.forEach((r) => db.insert(stubTable).values(r).run());
+
+        // Delete all
+        repo.deleteById(["restore-1", "restore-2"]);
+        expect(repo.findAll()).toHaveLength(0);
+
+        // Restore all
+        const result = repo.restoreById(["restore-1", "restore-2"]);
+        expect(result).toEqual(["restore-1", "restore-2"]);
+        expect(repo.findAll()).toHaveLength(2);
+      });
+
+      it("should throw error when ID not found", () => {
+        expect(() => repo.restoreById("nonexistent")).toThrow(
+          'Records not found for IDs: "nonexistent"'
+        );
+      });
+
+      it("should throw error when empty array provided", () => {
+        expect(() => repo.restoreById([])).toThrow("No IDs provided for restore");
+      });
+
+      it("should be idempotent - restoring non-deleted record succeeds", () => {
+        const record = createStubRecord({ id: "restore-twice", name: "RestoreTwice" });
+        db.insert(stubTable).values(record).run();
+
+        // Restore without deleting first - should not throw
+        const result = repo.restoreById("restore-twice");
+        expect(result).toEqual(["restore-twice"]);
+      });
+
+      it("should set deletedAt to null", () => {
+        const record = createStubRecord({ id: "check-null", name: "CheckNull" });
+        db.insert(stubTable).values(record).run();
+
+        repo.deleteById("check-null");
+        repo.restoreById("check-null");
+
+        const rawRecord = db
+          .select()
+          .from(stubTable)
+          .all()
+          .find((r) => r.id === "check-null");
+
+        expect(rawRecord!.deletedAt).toBeNull();
+      });
+    });
+
+    describe("emptyTrashById", () => {
+      it("should permanently delete a single record", () => {
+        const record = createStubRecord({ id: "hard-delete-1", name: "HardDelete" });
+        db.insert(stubTable).values(record).run();
+
+        const result = repo.emptyTrashById("hard-delete-1");
+        expect(result).toEqual(["hard-delete-1"]);
+
+        // Record should not exist at all
+        const allRecords = db.select().from(stubTable).all();
+        expect(allRecords).toHaveLength(0);
+      });
+
+      it("should permanently delete multiple records", () => {
+        const records = [
+          createStubRecord({ id: "hard-1", name: "First" }),
+          createStubRecord({ id: "hard-2", name: "Second" }),
+          createStubRecord({ id: "keep", name: "Keep" }),
+        ];
+        records.forEach((r) => db.insert(stubTable).values(r).run());
+
+        const result = repo.emptyTrashById(["hard-1", "hard-2"]);
+        expect(result).toEqual(["hard-1", "hard-2"]);
+
+        const allRecords = db.select().from(stubTable).all();
+        expect(allRecords).toHaveLength(1);
+        expect(allRecords[0].id).toBe("keep");
+      });
+
+      it("should throw error when ID not found", () => {
+        expect(() => repo.emptyTrashById("nonexistent")).toThrow(
+          'Records not found for IDs: "nonexistent"'
+        );
+      });
+
+      it("should throw error when empty array provided", () => {
+        expect(() => repo.emptyTrashById([])).toThrow("No IDs provided for permanent delete");
+      });
+
+      it("should work on soft-deleted records", () => {
+        const record = createStubRecord({ id: "soft-then-hard", name: "SoftThenHard" });
+        db.insert(stubTable).values(record).run();
+
+        // Soft delete first
+        repo.deleteById("soft-then-hard");
+
+        // Then hard delete
+        const result = repo.emptyTrashById("soft-then-hard");
+        expect(result).toEqual(["soft-then-hard"]);
+
+        // Should be completely gone
+        const allRecords = db.select().from(stubTable).all();
+        expect(allRecords).toHaveLength(0);
+      });
+    });
+
+    describe("find methods with includeDeleted", () => {
+      beforeEach(() => {
+        const records = [
+          createStubRecord({ id: "active-1", name: "Active1", status: "active" }),
+          createStubRecord({ id: "active-2", name: "Active2", status: "active" }),
+          createStubRecord({ id: "deleted-1", name: "Deleted1", status: "active" }),
+          createStubRecord({ id: "deleted-2", name: "Deleted2", status: "active" }),
+        ];
+        records.forEach((r) => db.insert(stubTable).values(r).run());
+
+        // Soft delete some records
+        repo.deleteById(["deleted-1", "deleted-2"]);
+      });
+
+      it("findAll should exclude deleted records by default", () => {
+        const results = repo.findAll();
+        expect(results).toHaveLength(2);
+        expect(results.map((r) => (r as { id: string }).id).sort()).toEqual([
+          "active-1",
+          "active-2",
+        ]);
+      });
+
+      it("findAll should include deleted records when includeDeleted is true", () => {
+        const results = repo.findAll({ includeDeleted: true });
+        expect(results).toHaveLength(4);
+      });
+
+      it("findById should exclude deleted records by default", () => {
+        const result = repo.findById("deleted-1");
+        expect(result).toBeUndefined();
+      });
+
+      it("findById should include deleted records when includeDeleted is true", () => {
+        const result = repo.findById("deleted-1", { includeDeleted: true });
+        expect(result).toBeDefined();
+        expect((result as { id: string }).id).toBe("deleted-1");
+      });
+
+      it("findWhere should exclude deleted records by default", () => {
+        const results = repo.findWhere({ status: "active" });
+        expect(results).toHaveLength(2);
+      });
+
+      it("findWhere should include deleted records when includeDeleted is true", () => {
+        const results = repo.findWhere({ status: "active" }, { includeDeleted: true });
+        expect(results).toHaveLength(4);
+      });
+    });
+  });
 });
