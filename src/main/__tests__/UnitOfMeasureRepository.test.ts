@@ -3,6 +3,7 @@ import { drizzle, BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import BetterSqlite3, { Database } from "better-sqlite3";
 import { UnitOfMeasureRepository } from "../repositories/UnitOfMeasureRepository";
 import { unitsOfMeasure } from "../db/schema/unitsOfMeasure";
+import { unitOfMeasureSchema } from "../../contracts";
 
 describe("UnitOfMeasureRepository", () => {
   let sqlite: Database;
@@ -202,6 +203,42 @@ describe("UnitOfMeasureRepository", () => {
       });
       // Verify no extra properties
       expect(Object.keys(result!)).toHaveLength(2);
+    });
+  });
+
+  describe("contract validation", () => {
+    it("findAll output should conform to UnitOfMeasure contract", () => {
+      repo.insert({ name: "each" });
+      repo.insert({ name: "linear foot" });
+      repo.insert({ name: "hour" });
+
+      const results = repo.findAll();
+
+      expect(results).toHaveLength(3);
+      results.forEach((result) => {
+        expect(() => unitOfMeasureSchema.parse(result)).not.toThrow();
+      });
+    });
+
+    it("findById output should conform to UnitOfMeasure contract", () => {
+      const ids = repo.insert({ name: "square foot" });
+
+      const result = repo.findById(ids[0]);
+
+      expect(result).toBeDefined();
+      expect(() => unitOfMeasureSchema.parse(result)).not.toThrow();
+    });
+
+    it("findWhere output should conform to UnitOfMeasure contract", () => {
+      repo.insert({ name: "cubic yard" });
+      repo.insert({ name: "cubic yard" });
+
+      const results = repo.findWhere({ name: "cubic yard" });
+
+      expect(results).toHaveLength(2);
+      results.forEach((result) => {
+        expect(() => unitOfMeasureSchema.parse(result)).not.toThrow();
+      });
     });
   });
 });
