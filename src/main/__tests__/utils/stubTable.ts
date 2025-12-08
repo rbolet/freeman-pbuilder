@@ -2,13 +2,21 @@ import { sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 /**
  * Stub Drizzle table for testing repositories
+ * Uses $defaultFn for id and timestamps to match production schema behavior
  */
 export const stubTable = sqliteTable("stub_table", {
-  id: text("id").primaryKey(),
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
   name: text("name").notNull(),
   status: text("status"),
-  createdAt: text("created_at").notNull(),
-  updatedAt: text("updated_at").notNull(),
+  createdAt: text("created_at")
+    .notNull()
+    .$defaultFn(() => new Date().toISOString()),
+  updatedAt: text("updated_at")
+    .notNull()
+    .$defaultFn(() => new Date().toISOString())
+    .$onUpdateFn(() => new Date().toISOString()),
   deletedAt: text("deleted_at"),
 });
 

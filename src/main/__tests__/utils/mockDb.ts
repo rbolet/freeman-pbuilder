@@ -128,12 +128,53 @@ class MockUpdateBuilder {
 }
 
 /**
+ * Mock insert builder that mimics Drizzle's insert fluent interface.
+ */
+class MockInsertBuilder {
+  private _insertResults: Array<{ id: string }> = [];
+  private _valuesToInsert: unknown[] = [];
+
+  constructor(private mockDb: MockDb) {}
+
+  values(records: unknown | unknown[]): this {
+    this._valuesToInsert = Array.isArray(records) ? records : [records];
+    return this;
+  }
+
+  returning(_columns: unknown): this {
+    // Use configured insert results, or generate from values
+    const configured = this.mockDb.getInsertResults();
+    if (configured.length > 0) {
+      this._insertResults = configured;
+    } else {
+      // Default: return IDs from the values if they have them, or generate new ones
+      this._insertResults = this._valuesToInsert.map((v) => ({
+        id: (v as { id?: string }).id ?? crypto.randomUUID(),
+      }));
+    }
+    return this;
+  }
+
+  all(): Array<{ id: string }> {
+    return this._insertResults;
+  }
+
+  run(): void {
+    // For backwards compatibility - just store the records
+    for (const record of this._valuesToInsert) {
+      this.mockDb.addInsertedRecord(record as MockRecord);
+    }
+  }
+}
+
+/**
  * Mock database that mimics BetterSQLite3Database interface.
  * Allows setting return values for queries.
  */
 export class MockDb {
   private _results: MockRecord[] = [];
   private _updateResults: Array<{ id: string }> = [];
+  private _insertResults: Array<{ id: string }> = [];
   private _insertedRecords: MockRecord[] = [];
 
   /**
@@ -167,6 +208,28 @@ export class MockDb {
   }
 
   /**
+   * Set the results that insert queries will return (for .returning()).
+   * Pass an array of objects with id property to simulate inserted records.
+   */
+  setInsertResults(results: Array<{ id: string }>): void {
+    this._insertResults = results;
+  }
+
+  /**
+   * Get the currently configured insert results.
+   */
+  getInsertResults(): Array<{ id: string }> {
+    return this._insertResults;
+  }
+
+  /**
+   * Add a record to the list of inserted records.
+   */
+  addInsertedRecord(record: MockRecord): void {
+    this._insertedRecords.push(record);
+  }
+
+  /**
    * Get all records that were "inserted" via the mock.
    */
   getInsertedRecords(): MockRecord[] {
@@ -179,6 +242,7 @@ export class MockDb {
   reset(): void {
     this._results = [];
     this._updateResults = [];
+    this._insertResults = [];
     this._insertedRecords = [];
   }
 
@@ -197,18 +261,10 @@ export class MockDb {
   }
 
   /**
-   * Mimics db.insert() - captures inserted values.
+   * Mimics db.insert() - returns an insert builder.
    */
-  insert(_table: unknown): {
-    values: (record: MockRecord) => { run: () => void };
-  } {
-    return {
-      values: (record: MockRecord) => ({
-        run: () => {
-          this._insertedRecords.push(record);
-        },
-      }),
-    };
+  insert(_table: unknown): MockInsertBuilder {
+    return new MockInsertBuilder(this);
   }
 }
 

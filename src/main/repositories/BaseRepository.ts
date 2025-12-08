@@ -1,6 +1,10 @@
 import { eq, and, inArray } from "drizzle-orm";
 import { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { SQLiteTable, SQLiteColumn } from "drizzle-orm/sqlite-core";
+import { validateUUIDs } from "../utils";
+
+/** Audit timestamp column names */
+const AUDIT_TIMESTAMP_KEYS = ["createdAt", "updatedAt", "deletedAt"] as const;
 
 /**
  * Base table type that all entity tables should conform to.
@@ -31,8 +35,51 @@ export interface BaseRecord {
  * Options for the transform method
  */
 export interface TransformOptions {
-  /** Include audit timestamps (createdAt, updatedAt, deletedAt) in output */
+  /** Include audit timestamps (createdAt, updatedAt, deletedAt) in output. Default: false */
   includeTimestamps?: boolean;
+  /** Keys to exclude from output. Ignored if `include` is provided. */
+  exclude?: string[];
+  /** Keys to include in output. If provided, only these keys are returned. */
+  include?: string[];
+}
+
+/**
+ * Options for the insert method
+ */
+export interface InsertOptions {
+  /** Number of records to insert. Default: 1 */
+  qty?: number;
+  /** Pre-generated UUIDs. If provided, must match qty count. */
+  ids?: string[];
+}
+
+/**
+ * Strip keys from a record based on transform options.
+ * - If `include` is provided, returns only those keys
+ * - Otherwise, excludes keys from `exclude` array
+ * - If `includeTimestamps` is false, audit timestamps are added to exclude list
+ *
+ * Exported for use by sibling repositories that may not extend BaseRepository.
+ */
+export function stripKeys(
+  record: Record<string, unknown>,
+  options: TransformOptions = {}
+): Record<string, unknown> {
+  const { includeTimestamps = false, exclude = [], include } = options;
+
+  // If include is provided, return only those keys
+  if (include && include.length > 0) {
+    return Object.fromEntries(Object.entries(record).filter(([key]) => include.includes(key)));
+  }
+
+  // Build exclude list
+  const keysToExclude = [...exclude];
+  if (!includeTimestamps) {
+    keysToExclude.push(...AUDIT_TIMESTAMP_KEYS);
+  }
+
+  // Return record without excluded keys
+  return Object.fromEntries(Object.entries(record).filter(([key]) => !keysToExclude.includes(key)));
 }
 
 /**
@@ -54,9 +101,9 @@ export class BaseRepository<T extends BaseTable, TOutput = T["$inferSelect"]> {
    */
   protected transform(
     record: T["$inferSelect"],
-    _options: TransformOptions = { includeTimestamps: false }
+    options: TransformOptions = { includeTimestamps: false }
   ): TOutput {
-    return record as unknown as TOutput;
+    return stripKeys(record as Record<string, unknown>, options) as TOutput;
   }
 
   /**
@@ -147,5 +194,59 @@ export class BaseRepository<T extends BaseTable, TOutput = T["$inferSelect"]> {
     }
 
     return updatedIds;
+  }
+
+  /**
+   * Insert one or more records
+   * @param data - Partial record data (id and timestamps auto-generated if not provided)
+   * @param options - Insert options
+   * @param options.qty - Number of records to insert (default: 1)
+   * @param options.ids - Pre-generated UUIDs (must match qty if provided)
+   * @returns Array of inserted record IDs
+   * @throws Error if qty doesn't match ids length, if ids are invalid UUIDs,
+   *         or if returned IDs don't match provided IDs
+   */
+  insert(
+    data: Omit<Partial<T["$inferSelect"]>, "id" | "createdAt" | "updatedAt" | "deletedAt">,
+    options: InsertOptions = {}
+  ): string[] {
+    const { qty = 1, ids } = options;
+
+    // Validate qty matches ids length if ids provided
+    if (ids && ids.length !== qty) {
+      throw new Error(`IDs array length (${ids.length}) must match qty (${qty})`);
+    }
+
+    // Validate provided IDs are valid UUIDs
+    if (ids) {
+      validateUUIDs(ids);
+    }
+
+    // Build array of records to insert
+    const records = Array.from({ length: qty }, (_, index) => ({
+      ...data,
+      ...(ids ? { id: ids[index] } : {}),
+    }));
+
+    // Insert and get returned IDs
+    const insertedRows = this.db
+      .insert(this.table)
+      .values(records as T["$inferSelect"][])
+      .returning({ id: this.table.id })
+      .all();
+
+    const insertedIds = insertedRows.map((row) => row.id as string);
+
+    // If IDs were provided, verify they match the returned IDs
+    if (ids) {
+      const mismatchedIds = ids.filter((id) => !insertedIds.includes(id));
+      if (mismatchedIds.length > 0) {
+        throw new Error(
+          `Inserted IDs do not match provided IDs: ${mismatchedIds.map((id) => `"${id}"`).join(", ")}`
+        );
+      }
+    }
+
+    return insertedIds;
   }
 }
