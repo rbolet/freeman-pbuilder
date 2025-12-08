@@ -24,9 +24,7 @@ export interface MockRecord {
 /**
  * Factory function to create mock records with sensible defaults.
  */
-export function createMockRecord(
-  overrides: Partial<MockRecord> = {}
-): MockRecord {
+export function createMockRecord(overrides: Partial<MockRecord> = {}): MockRecord {
   const now = new Date().toISOString();
   return {
     id: crypto.randomUUID(),
@@ -103,15 +101,43 @@ class MockQueryBuilder {
 }
 
 /**
+ * Mock update builder that mimics Drizzle's update fluent interface.
+ */
+class MockUpdateBuilder {
+  private _updateResults: Array<{ id: string }> = [];
+
+  constructor(private mockDb: MockDb) {}
+
+  set(_changes: unknown): this {
+    return this;
+  }
+
+  where(_condition: unknown): this {
+    // Use the configured update results
+    this._updateResults = [...this.mockDb.getUpdateResults()];
+    return this;
+  }
+
+  returning(_columns: unknown): this {
+    return this;
+  }
+
+  all(): Array<{ id: string }> {
+    return this._updateResults;
+  }
+}
+
+/**
  * Mock database that mimics BetterSQLite3Database interface.
  * Allows setting return values for queries.
  */
 export class MockDb {
   private _results: MockRecord[] = [];
+  private _updateResults: Array<{ id: string }> = [];
   private _insertedRecords: MockRecord[] = [];
 
   /**
-   * Set the results that queries will return.
+   * Set the results that select queries will return.
    * Call this before running repository methods to control output.
    */
   setResults(results: MockRecord[]): void {
@@ -119,10 +145,25 @@ export class MockDb {
   }
 
   /**
-   * Get the currently configured results.
+   * Get the currently configured select results.
    */
   getResults(): MockRecord[] {
     return this._results;
+  }
+
+  /**
+   * Set the results that update queries will return (for .returning()).
+   * Pass an array of objects with id property to simulate updated records.
+   */
+  setUpdateResults(results: Array<{ id: string }>): void {
+    this._updateResults = results;
+  }
+
+  /**
+   * Get the currently configured update results.
+   */
+  getUpdateResults(): Array<{ id: string }> {
+    return this._updateResults;
   }
 
   /**
@@ -137,6 +178,7 @@ export class MockDb {
    */
   reset(): void {
     this._results = [];
+    this._updateResults = [];
     this._insertedRecords = [];
   }
 
@@ -145,6 +187,13 @@ export class MockDb {
    */
   select(): MockQueryBuilder {
     return new MockQueryBuilder(this);
+  }
+
+  /**
+   * Mimics db.update() - returns an update builder.
+   */
+  update(_table: unknown): MockUpdateBuilder {
+    return new MockUpdateBuilder(this);
   }
 
   /**

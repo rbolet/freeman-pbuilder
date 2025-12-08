@@ -18,9 +18,7 @@ export type NewStubRecord = typeof stubTable.$inferInsert;
 /**
  * Factory for creating stub records with defaults
  */
-export function createStubRecord(
-  overrides: Partial<StubRecord> = {}
-): StubRecord {
+export function createStubRecord(overrides: Partial<StubRecord> = {}): StubRecord {
   return {
     id: "test-uuid-1234",
     name: "Test Record",

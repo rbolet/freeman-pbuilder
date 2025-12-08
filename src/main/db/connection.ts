@@ -106,9 +106,7 @@ export async function initializeDatabase(
  */
 export function getDatabase(): BetterSQLite3Database<typeof schema> {
   if (!db) {
-    throw new Error(
-      "Database not initialized. Call initializeDatabase() first."
-    );
+    throw new Error("Database not initialized. Call initializeDatabase() first.");
   }
   return db;
 }

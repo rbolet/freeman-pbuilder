@@ -28,9 +28,7 @@ describe("Home Route", () => {
     const router = createTestRouter(["/"]);
     render(<RouterProvider router={router} />);
 
-    expect(
-      screen.getByText("Welcome to Freeman Proposal Builder")
-    ).toBeInTheDocument();
+    expect(screen.getByText("Welcome to Freeman Proposal Builder")).toBeInTheDocument();
   });
 
   it("displays the tech stack information", () => {

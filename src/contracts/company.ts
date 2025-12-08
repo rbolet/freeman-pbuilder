@@ -3,14 +3,8 @@ import { z } from "zod";
 /**
  * Enum schemas matching database enums
  */
-export const companyRelationshipTypeSchema = z.enum([
-  "SELF",
-  "CUSTOMER",
-  "VENDOR",
-]);
-export type CompanyRelationshipType = z.infer<
-  typeof companyRelationshipTypeSchema
->;
+export const companyRelationshipTypeSchema = z.enum(["SELF", "CUSTOMER", "VENDOR"]);
+export type CompanyRelationshipType = z.infer<typeof companyRelationshipTypeSchema>;
 
 export const paymentTermsSchema = z.enum(["NET_30", "NET_45", "NET_60"]);
 export type PaymentTerms = z.infer<typeof paymentTermsSchema>;

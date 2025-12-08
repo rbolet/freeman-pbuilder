@@ -42,10 +42,8 @@ export function withCustomError<T extends object>(
           } catch (error) {
             const className = target.constructor.name;
             const methodName = String(prop);
-            const originalMessage =
-              error instanceof Error ? error.message : String(error);
-            const originalStack =
-              error instanceof Error ? error.stack : undefined;
+            const originalMessage = error instanceof Error ? error.message : String(error);
+            const originalStack = error instanceof Error ? error.stack : undefined;
 
             const customError = new CustomError(
               `@ ${className}.${methodName}: ${originalMessage}`,

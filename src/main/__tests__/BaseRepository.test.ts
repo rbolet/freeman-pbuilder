@@ -205,4 +205,76 @@ describe("BaseRepository", () => {
       expect(results[0]).toEqual({ id: "t3", displayName: "WORLD" });
     });
   });
+
+  describe("updateById", () => {
+    it("should update a single record and return its ID", () => {
+      const record = createStubRecord({ id: "update-1", name: "Original" });
+      db.insert(stubTable).values(record).run();
+
+      const updatedIds = repo.updateById("update-1", { name: "Updated" });
+
+      expect(updatedIds).toEqual(["update-1"]);
+
+      // Verify the record was actually updated
+      const updated = repo.findById("update-1");
+      expect(updated?.name).toBe("Updated");
+    });
+
+    it("should update multiple records and return their IDs", () => {
+      const record1 = createStubRecord({ id: "multi-1", status: "pending" });
+      const record2 = createStubRecord({ id: "multi-2", status: "pending" });
+      db.insert(stubTable).values(record1).run();
+      db.insert(stubTable).values(record2).run();
+
+      const updatedIds = repo.updateById(["multi-1", "multi-2"], {
+        status: "active",
+      });
+
+      expect(updatedIds).toHaveLength(2);
+      expect(updatedIds).toContain("multi-1");
+      expect(updatedIds).toContain("multi-2");
+
+      // Verify both records were updated
+      const updated1 = repo.findById("multi-1");
+      const updated2 = repo.findById("multi-2");
+      expect(updated1?.status).toBe("active");
+      expect(updated2?.status).toBe("active");
+    });
+
+    it("should throw error when given empty array of IDs", () => {
+      expect(() => repo.updateById([], { name: "Ignored" })).toThrow("No IDs provided for update");
+    });
+
+    it("should throw error when single ID is not found", () => {
+      expect(() => repo.updateById("nonexistent", { name: "Test" })).toThrow(
+        'Records not found for IDs: "nonexistent"'
+      );
+    });
+
+    it("should throw error when any ID in array is not found", () => {
+      const record = createStubRecord({ id: "exists-1" });
+      db.insert(stubTable).values(record).run();
+
+      expect(() =>
+        repo.updateById(["exists-1", "missing-1", "missing-2"], {
+          name: "Test",
+        })
+      ).toThrow('Records not found for IDs: "missing-1", "missing-2"');
+    });
+
+    it("should throw error listing all missing IDs (using mock)", () => {
+      // Use mock to control exactly which IDs are "updated"
+      const { db: mockDb, table: mockTable } = createMockSetup();
+
+      // Simulate only id-1 being found/updated
+      mockDb.setUpdateResults([{ id: "id-1" }]);
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const mockRepo = new BaseRepository(mockDb as any, mockTable as any);
+
+      expect(() => mockRepo.updateById(["id-1", "id-2", "id-3"], { name: "Test" })).toThrow(
+        'Records not found for IDs: "id-2", "id-3"'
+      );
+    });
+  });
 });

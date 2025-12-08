@@ -72,9 +72,7 @@ describe("Database Schema", () => {
   // Helper to get foreign keys
   const getForeignKeys = (tableName: string): ForeignKeyInfo[] => {
     const db = getDatabase();
-    return db.all<ForeignKeyInfo>(
-      sql.raw(`PRAGMA foreign_key_list(${tableName})`)
-    );
+    return db.all<ForeignKeyInfo>(sql.raw(`PRAGMA foreign_key_list(${tableName})`));
   };
 
   // Helper to check if table exists
@@ -120,12 +118,9 @@ describe("Database Schema", () => {
       expect(tableExists(tableName)).toBe(true);
     });
 
-    it.each(expectedTables)(
-      "table '%s' should have standard columns",
-      (tableName) => {
-        hasStandardColumns(tableName);
-      }
-    );
+    it.each(expectedTables)("table '%s' should have standard columns", (tableName) => {
+      hasStandardColumns(tableName);
+    });
   });
 
   describe("companies table", () => {
@@ -210,9 +205,7 @@ describe("Database Schema", () => {
 
     it("should have FK to company_relationships", () => {
       const fks = getForeignKeys("company_relationship_terms");
-      const relationshipFk = fks.find(
-        (fk) => fk.table === "company_relationships"
-      );
+      const relationshipFk = fks.find((fk) => fk.table === "company_relationships");
 
       expect(relationshipFk).toBeDefined();
       expect(relationshipFk?.from).toBe("company_relationship_id");
@@ -244,9 +237,7 @@ describe("Database Schema", () => {
 
     it("should have nullable manufacturer_id FK", () => {
       const columns = getTableColumns("standard_line_items");
-      const manufacturerIdCol = columns.find(
-        (c) => c.name === "manufacturer_id"
-      );
+      const manufacturerIdCol = columns.find((c) => c.name === "manufacturer_id");
 
       expect(manufacturerIdCol?.notnull).toBe(0); // Nullable
     });
@@ -359,9 +350,7 @@ describe("Database Schema", () => {
       const realCols = ["quantity", "cost", "sell"];
       realCols.forEach((colName) => {
         const col = columns.find((c) => c.name === colName);
-        expect(col?.type.toUpperCase(), `${colName} should be REAL`).toBe(
-          "REAL"
-        );
+        expect(col?.type.toUpperCase(), `${colName} should be REAL`).toBe("REAL");
       });
     });
 

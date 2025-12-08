@@ -4,17 +4,11 @@ import fs from "fs";
 import os from "os";
 
 // Create a unique temp directory for test databases
-export const TEST_DATA_DIR = path.join(
-  os.tmpdir(),
-  "pbuilder-test-" + process.pid
-);
+export const TEST_DATA_DIR = path.join(os.tmpdir(), "pbuilder-test-" + process.pid);
 
 // Test database and migrations paths
 export const TEST_DB_PATH = path.join(TEST_DATA_DIR, "test.db");
-export const MIGRATIONS_PATH = path.join(
-  process.cwd(),
-  "src/main/db/migrations"
-);
+export const MIGRATIONS_PATH = path.join(process.cwd(), "src/main/db/migrations");
 
 // Mock Electron's app module for any code that imports it directly
 vi.mock("electron", () => ({

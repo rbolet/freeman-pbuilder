@@ -2,12 +2,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import path from "path";
 import fs from "fs";
 import { sql } from "drizzle-orm";
-import {
-  initializeDatabase,
-  closeDatabase,
-  getDatabase,
-  isDatabaseConnected,
-} from "../db";
+import { initializeDatabase, closeDatabase, getDatabase, isDatabaseConnected } from "../db";
 import { TEST_DATA_DIR, MIGRATIONS_PATH } from "./setup";
 
 describe("Database Connection", () => {

@@ -22,7 +22,5 @@ export const companyRelationships = sqliteTable("company_relationships", {
   ...auditTimestamps,
 });
 
-export type CompanyRelationshipRecord =
-  typeof companyRelationships.$inferSelect;
-export type NewCompanyRelationshipRecord =
-  typeof companyRelationships.$inferInsert;
+export type CompanyRelationshipRecord = typeof companyRelationships.$inferSelect;
+export type NewCompanyRelationshipRecord = typeof companyRelationships.$inferInsert;
