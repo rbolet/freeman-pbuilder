@@ -11,10 +11,13 @@ export const TEST_DATA_DIR = path.join(
 
 // Test database and migrations paths
 export const TEST_DB_PATH = path.join(TEST_DATA_DIR, "test.db");
+<<<<<<< Updated upstream
 export const MIGRATIONS_PATH = path.join(
   process.cwd(),
   "src/main/db/migrations"
 );
+=======
+>>>>>>> Stashed changes
 
 // Mock Electron's app module for any code that imports it directly
 vi.mock("electron", () => ({

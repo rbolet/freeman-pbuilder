@@ -1,15 +1,13 @@
 import path from "node:path";
 import fs from "node:fs";
-import BetterSqlite3 from "better-sqlite3";
-import { drizzle, BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import { migrate } from "drizzle-orm/better-sqlite3/migrator";
+import { Sequelize } from "sequelize";
 import { app } from "electron";
-import * as schema from "./schema";
+import { runMigrations } from "./migrations";
 
 const DB_NAME = "pbuilder.db";
 
-let db: BetterSQLite3Database<typeof schema> | null = null;
-let sqlite: BetterSqlite3.Database | null = null;
+// Registry to track database connections by path
+const dbRegistry = new Map<string, Sequelize>();
 
 /**
  * Configuration options for database initialization
@@ -17,8 +15,6 @@ let sqlite: BetterSqlite3.Database | null = null;
 export interface DatabaseConfig {
   /** Custom database file path (for testing) */
   dbPath?: string;
-  /** Custom migrations folder path (for testing) */
-  migrationsPath?: string;
 }
 
 /**
@@ -43,36 +39,20 @@ export function getDefaultDbPath(): string {
 }
 
 /**
- * Get the default migrations folder path
- * In production, migrations are bundled with the app
- */
-export function getDefaultMigrationsPath(): string {
-  const isDev = !app.isPackaged;
-
-  if (isDev) {
-    return path.join(process.cwd(), "src/main/db/migrations");
-  }
-
-  // In production, migrations are in the resources folder
-  return path.join(process.resourcesPath, "migrations");
-}
-
-/**
  * Initialize the database connection and run migrations
  * @param config - Optional configuration for custom paths (useful for testing)
+ * @returns Sequelize instance for the database
  */
-export async function initializeDatabase(
-  config?: DatabaseConfig
-): Promise<BetterSQLite3Database<typeof schema>> {
-  if (db) {
-    return db;
+export async function initializeDatabase(config?: DatabaseConfig): Promise<Sequelize> {
+  const dbPath = config?.dbPath ?? getDefaultDbPath();
+
+  // Check if we already have a connection for this path
+  const existingDb = dbRegistry.get(dbPath);
+  if (existingDb) {
+    return existingDb;
   }
 
-  const dbPath = config?.dbPath ?? getDefaultDbPath();
-  const migrationsPath = config?.migrationsPath ?? getDefaultMigrationsPath();
-
   console.log(`[DB] Initializing database at: ${dbPath}`);
-  console.log(`[DB] Migrations path: ${migrationsPath}`);
 
   // Ensure the directory exists for the database file
   const dbDir = path.dirname(dbPath);
@@ -80,30 +60,31 @@ export async function initializeDatabase(
     fs.mkdirSync(dbDir, { recursive: true });
   }
 
-  // Create the SQLite connection
-  const sqliteDb = new BetterSqlite3(dbPath);
+  // Create Sequelize instance with better-sqlite3
+  // Don't specify dialectModule - let Sequelize find better-sqlite3 automatically
+  const sequelize = new Sequelize({
+    dialect: "sqlite",
+    storage: dbPath,
+    logging: false,
+  });
 
   // Enable WAL mode for better concurrent read performance
-  sqliteDb.pragma("journal_mode = WAL");
-
-  // Store reference for cleanup
-  sqlite = sqliteDb;
-
-  // Create Drizzle instance with schema
-  db = drizzle(sqliteDb, { schema });
+  await sequelize.query("PRAGMA journal_mode = WAL;");
 
   // Run migrations
-  console.log("[DB] Running migrations...");
-  migrate(db, { migrationsFolder: migrationsPath });
-  console.log("[DB] Migrations complete");
+  await runMigrations(sequelize);
 
-  return db;
+  // Store in registry
+  dbRegistry.set(dbPath, sequelize);
+
+  return sequelize;
 }
 
 /**
- * Get the database instance
- * Throws if database has not been initialized
+ * Close a database connection
+ * @param sequelize - The Sequelize instance to close
  */
+<<<<<<< Updated upstream
 export function getDatabase(): BetterSQLite3Database<typeof schema> {
   if (!db) {
     throw new Error(
@@ -112,22 +93,36 @@ export function getDatabase(): BetterSQLite3Database<typeof schema> {
   }
   return db;
 }
+=======
+export async function closeDatabase(sequelize: Sequelize): Promise<void> {
+  console.log("[DB] Closing database connection");
+  await sequelize.close();
+>>>>>>> Stashed changes
 
-/**
- * Close the database connection
- */
-export function closeDatabase(): void {
-  if (sqlite) {
-    console.log("[DB] Closing database connection");
-    sqlite.close();
-    sqlite = null;
-    db = null;
+  // Remove from registry
+  for (const [path, instance] of dbRegistry.entries()) {
+    if (instance === sequelize) {
+      dbRegistry.delete(path);
+      break;
+    }
   }
 }
 
 /**
- * Check if database is connected
+ * Check if a database instance is connected
+ * @param sequelize - The Sequelize instance to check
  */
-export function isDatabaseConnected(): boolean {
-  return db !== null && sqlite !== null;
+export function isDatabaseConnected(sequelize: Sequelize): boolean {
+  try {
+    // Sequelize doesn't have a simple isConnected check
+    // We rely on the registry and trust that if it's in there, it's connected
+    for (const instance of dbRegistry.values()) {
+      if (instance === sequelize) {
+        return true;
+      }
+    }
+    return false;
+  } catch {
+    return false;
+  }
 }

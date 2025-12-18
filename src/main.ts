@@ -33,13 +33,16 @@ const createWindow = () => {
   }
 };
 
+// Store database instance for cleanup
+let db: Awaited<ReturnType<typeof initializeDatabase>> | null = null;
+
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.on("ready", async () => {
   // Initialize database before creating windows
   try {
-    await initializeDatabase();
+    db = await initializeDatabase();
     console.log("[Main] Database initialized successfully");
   } catch (error) {
     console.error("[Main] Failed to initialize database:", error);
@@ -64,8 +67,10 @@ app.on("activate", () => {
 });
 
 // Clean up database connection before quitting
-app.on("before-quit", () => {
-  closeDatabase();
+app.on("before-quit", async () => {
+  if (db) {
+    await closeDatabase(db);
+  }
 });
 
 // In this file you can include the rest of your app's specific main process

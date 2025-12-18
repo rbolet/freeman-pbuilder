@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach } from "vitest";
 import path from "path";
 import fs from "fs";
+<<<<<<< Updated upstream
 import { sql } from "drizzle-orm";
 import {
   initializeDatabase,
@@ -9,13 +10,22 @@ import {
   isDatabaseConnected,
 } from "../db";
 import { TEST_DATA_DIR, MIGRATIONS_PATH } from "./setup";
+=======
+import { Sequelize } from "sequelize";
+import { initializeDatabase, closeDatabase, isDatabaseConnected } from "../db/connection";
+import { TEST_DATA_DIR } from "./setup";
+>>>>>>> Stashed changes
 
 describe("Database Connection", () => {
   const testDbPath = path.join(TEST_DATA_DIR, "connection-test.db");
+  let db: Sequelize | null = null;
 
-  afterEach(() => {
+  afterEach(async () => {
     // Close DB after each test
-    closeDatabase();
+    if (db) {
+      await closeDatabase(db);
+      db = null;
+    }
 
     // Clean up test database file
     if (fs.existsSync(testDbPath)) {
@@ -31,9 +41,8 @@ describe("Database Connection", () => {
   });
 
   it("should initialize database and create file", async () => {
-    const db = await initializeDatabase({
+    db = await initializeDatabase({
       dbPath: testDbPath,
-      migrationsPath: MIGRATIONS_PATH,
     });
 
     expect(db).toBeDefined();
@@ -41,57 +50,48 @@ describe("Database Connection", () => {
   });
 
   it("should return true for isDatabaseConnected after initialization", async () => {
-    expect(isDatabaseConnected()).toBe(false);
-
-    await initializeDatabase({
+    const testDb = await initializeDatabase({
       dbPath: testDbPath,
-      migrationsPath: MIGRATIONS_PATH,
     });
+    db = testDb;
 
-    expect(isDatabaseConnected()).toBe(true);
+    expect(isDatabaseConnected(testDb)).toBe(true);
   });
 
   it("should return the same instance on subsequent calls", async () => {
     const db1 = await initializeDatabase({
       dbPath: testDbPath,
-      migrationsPath: MIGRATIONS_PATH,
     });
 
     const db2 = await initializeDatabase({
       dbPath: testDbPath,
-      migrationsPath: MIGRATIONS_PATH,
     });
+
+    db = db1;
 
     expect(db1).toBe(db2);
   });
 
   it("should close database connection", async () => {
-    await initializeDatabase({
+    const testDb = await initializeDatabase({
       dbPath: testDbPath,
-      migrationsPath: MIGRATIONS_PATH,
     });
 
-    expect(isDatabaseConnected()).toBe(true);
+    expect(isDatabaseConnected(testDb)).toBe(true);
 
-    closeDatabase();
+    await closeDatabase(testDb);
 
-    expect(isDatabaseConnected()).toBe(false);
-  });
-
-  it("should throw when getting database before initialization", () => {
-    expect(() => getDatabase()).toThrow(
-      "Database not initialized. Call initializeDatabase() first."
-    );
+    expect(isDatabaseConnected(testDb)).toBe(false);
   });
 
   it("should run migrations and enable WAL mode", async () => {
-    const db = await initializeDatabase({
+    db = await initializeDatabase({
       dbPath: testDbPath,
-      migrationsPath: MIGRATIONS_PATH,
     });
 
     // Check WAL mode is enabled
-    const result = db.get<{ journal_mode: string }>(sql`PRAGMA journal_mode`);
+    const [results] = await db.query("PRAGMA journal_mode");
+    const result = results[0] as { journal_mode: string };
     expect(result?.journal_mode).toBe("wal");
   });
 });
