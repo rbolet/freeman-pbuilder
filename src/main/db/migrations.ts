@@ -39,7 +39,9 @@ async function ensureMigrationsTable(sequelize: Sequelize): Promise<void> {
  * Get list of migrations that have already been run
  */
 async function getExecutedMigrations(sequelize: Sequelize): Promise<string[]> {
-  const [results] = await sequelize.query(`SELECT name FROM ${MIGRATIONS_TABLE} ORDER BY name ASC`);
+  const [results] = await sequelize.query(
+    `SELECT name FROM ${MIGRATIONS_TABLE} ORDER BY name ASC`
+  );
   return (results as Array<{ name: string }>).map((row) => row.name);
 }
 
@@ -62,7 +64,10 @@ function getMigrationFiles(migrationsDir: string): string[] {
  * @param sequelize - The Sequelize instance
  * @param migrationsDir - Optional custom migrations directory (for testing)
  */
-export async function runMigrations(sequelize: Sequelize, migrationsDir?: string): Promise<void> {
+export async function runMigrations(
+  sequelize: Sequelize,
+  migrationsDir?: string
+): Promise<void> {
   const migDir = migrationsDir ?? path.join(__dirname, "migrations");
 
   // Ensure the migrations table exists
@@ -75,7 +80,9 @@ export async function runMigrations(sequelize: Sequelize, migrationsDir?: string
   const migrationFiles = getMigrationFiles(migDir);
 
   // Find pending migrations (files that haven't been executed)
-  const pendingMigrations = migrationFiles.filter((file) => !executedMigrations.includes(file));
+  const pendingMigrations = migrationFiles.filter(
+    (file) => !executedMigrations.includes(file)
+  );
 
   if (pendingMigrations.length === 0) {
     console.log("[DB] No pending migrations");
@@ -99,10 +106,13 @@ export async function runMigrations(sequelize: Sequelize, migrationsDir?: string
 
         await migration.up(queryInterface, sequelize);
 
-        await sequelize.query(`INSERT INTO ${MIGRATIONS_TABLE} (name) VALUES (:name)`, {
-          replacements: { name: migrationFile },
-          transaction,
-        });
+        await sequelize.query(
+          `INSERT INTO ${MIGRATIONS_TABLE} (name) VALUES (:name)`,
+          {
+            replacements: { name: migrationFile },
+            transaction,
+          }
+        );
       });
 
       console.log(`[DB] Migration completed: ${migrationFile}`);

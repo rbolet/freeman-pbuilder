@@ -43,7 +43,9 @@ export function getDefaultDbPath(): string {
  * @param config - Optional configuration for custom paths (useful for testing)
  * @returns Sequelize instance for the database
  */
-export async function initializeDatabase(config?: DatabaseConfig): Promise<Sequelize> {
+export async function initializeDatabase(
+  config?: DatabaseConfig
+): Promise<Sequelize> {
   const dbPath = config?.dbPath ?? getDefaultDbPath();
 
   // Check if we already have a connection for this path
@@ -84,20 +86,9 @@ export async function initializeDatabase(config?: DatabaseConfig): Promise<Seque
  * Close a database connection
  * @param sequelize - The Sequelize instance to close
  */
-<<<<<<< Updated upstream
-export function getDatabase(): BetterSQLite3Database<typeof schema> {
-  if (!db) {
-    throw new Error(
-      "Database not initialized. Call initializeDatabase() first."
-    );
-  }
-  return db;
-}
-=======
 export async function closeDatabase(sequelize: Sequelize): Promise<void> {
   console.log("[DB] Closing database connection");
   await sequelize.close();
->>>>>>> Stashed changes
 
   // Remove from registry
   for (const [path, instance] of dbRegistry.entries()) {

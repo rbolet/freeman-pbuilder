@@ -1,20 +1,13 @@
 import { describe, it, expect, afterEach } from "vitest";
 import path from "path";
 import fs from "fs";
-<<<<<<< Updated upstream
-import { sql } from "drizzle-orm";
+import { Sequelize } from "sequelize";
 import {
   initializeDatabase,
   closeDatabase,
-  getDatabase,
   isDatabaseConnected,
-} from "../db";
-import { TEST_DATA_DIR, MIGRATIONS_PATH } from "./setup";
-=======
-import { Sequelize } from "sequelize";
-import { initializeDatabase, closeDatabase, isDatabaseConnected } from "../db/connection";
+} from "../db/connection";
 import { TEST_DATA_DIR } from "./setup";
->>>>>>> Stashed changes
 
 describe("Database Connection", () => {
   const testDbPath = path.join(TEST_DATA_DIR, "connection-test.db");
